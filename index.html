@@ -1,0 +1,1301 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>美倫株式会社 - 週次業務報告書作成ツール</title>
+<!-- PDF生成はブラウザ印刷機能を使用（外部ライブラリ不要） -->
+<style>
+  :root {
+    --primary: #1a365d;
+    --primary-light: #2c5282;
+    --accent: #c53030;
+    --accent-light: #e53e3e;
+    --bg: #f7fafc;
+    --card: #ffffff;
+    --border: #e2e8f0;
+    --text: #2d3748;
+    --text-light: #718096;
+    --success: #38a169;
+    --warning: #d69e2e;
+    --info: #3182ce;
+    --orange: #dd6b20;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic", sans-serif;
+    background: var(--bg); color: var(--text); line-height: 1.6;
+  }
+  .header {
+    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+    color: white; padding: 20px 30px;
+    display: flex; align-items: center; justify-content: space-between;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.15);
+  }
+  .header h1 { font-size: 22px; font-weight: 700; letter-spacing: 2px; }
+  .header .subtitle { font-size: 13px; opacity: 0.85; margin-top: 2px; }
+  .header .version { font-size: 11px; opacity: 0.6; }
+  .container { max-width: 1200px; margin: 0 auto; padding: 24px; }
+
+  /* Save indicator */
+  .save-indicator {
+    position: fixed; top: 12px; right: 20px; z-index: 900;
+    font-size: 12px; padding: 5px 12px; border-radius: 20px;
+    background: rgba(255,255,255,0.95); box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    color: var(--text-light); transition: all 0.3s;
+  }
+  .save-indicator.saving { color: var(--info); }
+  .save-indicator.saved { color: var(--success); }
+
+  /* Meta */
+  .meta-section {
+    background: var(--card); border-radius: 10px; padding: 20px 24px;
+    margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; align-items: end;
+  }
+  .meta-section label {
+    display: block; font-size: 12px; font-weight: 600; color: var(--text-light);
+    margin-bottom: 6px; text-transform: uppercase; letter-spacing: 1px;
+  }
+  .meta-section input, .meta-section select {
+    width: 100%; padding: 10px 12px; border: 1px solid var(--border);
+    border-radius: 6px; font-size: 14px; font-family: inherit;
+    transition: border-color 0.2s; background: white;
+  }
+  .meta-section input:focus, .meta-section select:focus {
+    outline: none; border-color: var(--primary-light);
+    box-shadow: 0 0 0 3px rgba(44,82,130,0.1);
+  }
+
+  /* Tabs */
+  .day-tabs { display: flex; gap: 4px; padding: 0 4px; }
+  .day-tab {
+    padding: 10px 20px; background: #e2e8f0; border: none;
+    border-radius: 8px 8px 0 0; cursor: pointer; font-size: 14px;
+    font-weight: 600; font-family: inherit; color: var(--text-light);
+    transition: all 0.2s; position: relative;
+  }
+  .day-tab:hover { background: #cbd5e0; }
+  .day-tab.active { background: var(--card); color: var(--primary); box-shadow: 0 -2px 6px rgba(0,0,0,0.06); }
+  .day-tab .dot {
+    position: absolute; top: 6px; right: 6px;
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--success); display: none;
+  }
+  .day-tab.has-data .dot { display: block; }
+
+  /* Day panel */
+  .day-content {
+    background: var(--card); border-radius: 0 10px 10px 10px; padding: 24px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08); margin-bottom: 20px; display: none;
+  }
+  .day-content.active { display: block; }
+  .day-content h3 {
+    font-size: 16px; color: var(--primary); margin-bottom: 16px;
+    padding-bottom: 8px; border-bottom: 2px solid var(--border);
+  }
+
+  /* Task list */
+  .task-section { margin-bottom: 20px; }
+  .task-section-title {
+    font-size: 14px; font-weight: 700; color: var(--primary);
+    margin-bottom: 10px; display: flex; align-items: center; gap: 8px;
+  }
+  .task-section-title .cn { color: var(--accent); font-weight: 400; font-size: 12px; }
+  .task-section-title .count {
+    background: var(--primary); color: white; font-size: 11px;
+    padding: 1px 8px; border-radius: 10px; font-weight: 600;
+  }
+  .add-task-row { display: flex; gap: 8px; margin-bottom: 12px; }
+  .add-task-row input {
+    flex: 1; padding: 9px 12px; border: 1px solid var(--border);
+    border-radius: 6px; font-size: 14px; font-family: inherit;
+  }
+  .add-task-row input:focus {
+    outline: none; border-color: var(--primary-light);
+    box-shadow: 0 0 0 3px rgba(44,82,130,0.1);
+  }
+  .add-task-row button {
+    padding: 9px 16px; background: var(--primary); color: white;
+    border: none; border-radius: 6px; font-size: 13px; font-weight: 600;
+    font-family: inherit; cursor: pointer; white-space: nowrap;
+  }
+  .add-task-row button:hover { background: var(--primary-light); }
+
+  .task-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 12px; border: 1px solid var(--border);
+    border-radius: 8px; margin-bottom: 6px;
+    background: white; transition: all 0.2s;
+  }
+  .task-item:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+  .task-item.status-done { background: #f0fff4; border-color: #c6f6d5; }
+  .task-item.status-wip  { background: #fffaf0; border-color: #feebc8; }
+  .task-item .task-text { flex: 1; font-size: 14px; line-height: 1.4; }
+  .task-item .task-text .carry-badge {
+    display: inline-block; background: #fefcbf; color: #975a16;
+    font-size: 10px; padding: 0 5px; border-radius: 3px;
+    font-weight: 600; margin-right: 4px; vertical-align: middle;
+  }
+  .task-item .task-actions { display: flex; gap: 4px; flex-shrink: 0; }
+
+  .status-btn {
+    padding: 4px 10px; border-radius: 5px; font-size: 11px;
+    font-weight: 600; font-family: inherit; cursor: pointer;
+    border: 1.5px solid; transition: all 0.15s; background: white;
+  }
+  .status-btn.btn-done { border-color: var(--success); color: var(--success); }
+  .status-btn.btn-done:hover, .status-btn.btn-done.active { background: var(--success); color: white; }
+  .status-btn.btn-wip { border-color: var(--orange); color: var(--orange); }
+  .status-btn.btn-wip:hover, .status-btn.btn-wip.active { background: var(--orange); color: white; }
+  .status-btn.btn-del { border-color: #e2e8f0; color: var(--text-light); padding: 4px 7px; }
+  .status-btn.btn-del:hover { background: var(--accent); color: white; border-color: var(--accent); }
+
+  .auto-panel {
+    background: #f7fafc; border: 1px dashed var(--border);
+    border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; min-height: 40px;
+  }
+  .auto-panel-title {
+    font-size: 13px; font-weight: 700; margin-bottom: 8px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .auto-panel-title .label-done { color: var(--success); }
+  .auto-panel-title .label-wip  { color: var(--orange); }
+  .auto-panel-title .cn { color: var(--accent); font-weight: 400; font-size: 11px; }
+  .auto-panel .auto-item { font-size: 13px; padding: 4px 0; color: #4a5568; border-bottom: 1px solid #edf2f7; }
+  .auto-panel .auto-item:last-child { border-bottom: none; }
+  .auto-panel .empty-msg { font-size: 12px; color: #a0aec0; font-style: italic; }
+
+  .field-group { margin-bottom: 16px; }
+  .field-group label {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 6px;
+  }
+  .field-group .cn-label { color: var(--accent); font-weight: 400; font-size: 12px; }
+  .field-group textarea {
+    width: 100%; padding: 10px 12px; border: 1px solid var(--border);
+    border-radius: 6px; font-size: 14px; font-family: inherit;
+    resize: vertical; min-height: 50px; line-height: 1.5;
+  }
+  .field-group textarea:focus { outline: none; border-color: var(--primary-light); box-shadow: 0 0 0 3px rgba(44,82,130,0.1); }
+  .field-group input[type="number"] {
+    width: 200px; padding: 10px 12px; border: 1px solid var(--border);
+    border-radius: 6px; font-size: 14px; font-family: inherit;
+  }
+  .field-group input[type="number"]:focus { outline: none; border-color: var(--primary-light); box-shadow: 0 0 0 3px rgba(44,82,130,0.1); }
+
+  .carry-over-bar {
+    background: #fffaf0; border: 1px solid #feebc8; border-radius: 8px;
+    padding: 10px 14px; margin-bottom: 16px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .carry-over-bar .info { font-size: 13px; color: #975a16; }
+  .carry-over-bar .info strong { font-weight: 700; }
+  .carry-over-bar button {
+    padding: 6px 14px; background: var(--orange); color: white;
+    border: none; border-radius: 6px; font-size: 12px; font-weight: 600;
+    font-family: inherit; cursor: pointer;
+  }
+  .carry-over-bar button:hover { background: #c05621; }
+
+  .daily-note-section {
+    background: #fefce8; border: 1px solid #fef08a; border-radius: 8px;
+    padding: 14px 16px; margin-top: 8px;
+  }
+  .daily-note-section .note-title {
+    font-size: 13px; font-weight: 700; color: #a16207; margin-bottom: 8px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .daily-note-section .note-title .cn { color: var(--accent); font-weight: 400; font-size: 11px; }
+  .daily-note-section textarea {
+    width: 100%; padding: 10px 12px; border: 1px solid #fde68a;
+    border-radius: 6px; font-size: 14px; font-family: inherit;
+    resize: vertical; min-height: 60px; line-height: 1.5;
+    background: white;
+  }
+  .daily-note-section textarea:focus { outline: none; border-color: #f59e0b; box-shadow: 0 0 0 3px rgba(245,158,11,0.15); }
+
+  /* History panel */
+  .history-section {
+    background: var(--card); border-radius: 10px; padding: 20px 24px;
+    margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  }
+  .history-section h3 {
+    font-size: 16px; color: var(--primary); margin-bottom: 16px;
+    padding-bottom: 8px; border-bottom: 2px solid var(--border);
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .history-list { max-height: 300px; overflow-y: auto; }
+  .history-item {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 12px; border: 1px solid var(--border); border-radius: 6px;
+    margin-bottom: 6px; font-size: 13px; transition: background 0.15s;
+  }
+  .history-item:hover { background: #edf2f7; }
+  .history-item .hi-info { flex: 1; }
+  .history-item .hi-date { font-weight: 700; color: var(--primary); }
+  .history-item .hi-reporter { color: var(--text-light); margin-left: 12px; }
+  .history-item .hi-actions { display: flex; gap: 6px; }
+  .history-item .hi-btn {
+    padding: 4px 10px; border: 1px solid var(--border); border-radius: 4px;
+    font-size: 11px; font-weight: 600; font-family: inherit;
+    cursor: pointer; background: white; color: var(--text-light);
+  }
+  .history-item .hi-btn:hover { background: var(--primary); color: white; border-color: var(--primary); }
+  .history-item .hi-btn.del:hover { background: var(--accent); border-color: var(--accent); }
+  .no-history { font-size: 13px; color: #a0aec0; font-style: italic; padding: 8px 0; }
+
+  /* Buttons */
+  .actions { display: flex; gap: 12px; margin-top: 24px; justify-content: center; flex-wrap: wrap; }
+  .btn {
+    padding: 12px 28px; border: none; border-radius: 8px;
+    font-size: 15px; font-weight: 600; font-family: inherit;
+    cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 8px;
+  }
+  .btn-primary { background: var(--primary); color: white; }
+  .btn-primary:hover { background: var(--primary-light); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(26,54,93,0.3); }
+  .btn-accent { background: var(--accent); color: white; }
+  .btn-accent:hover { background: var(--accent-light); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(197,48,48,0.3); }
+  .btn-outline { background: white; color: var(--primary); border: 2px solid var(--primary); }
+  .btn-outline:hover { background: var(--primary); color: white; }
+  .btn-sm-outline {
+    padding: 6px 14px; background: white; color: var(--text-light);
+    border: 1px solid var(--border); border-radius: 6px; font-size: 12px;
+    font-weight: 600; font-family: inherit; cursor: pointer;
+  }
+  .btn-sm-outline:hover { background: #edf2f7; }
+
+  /* Modal */
+  .modal-overlay {
+    display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.5); z-index: 1000;
+    justify-content: center; align-items: center; padding: 20px;
+  }
+  .modal-overlay.active { display: flex; }
+  .modal {
+    background: white; border-radius: 12px; max-width: 900px; width: 100%;
+    max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+  }
+  .modal-header {
+    padding: 16px 24px; border-bottom: 1px solid var(--border);
+    display: flex; justify-content: space-between; align-items: center;
+    position: sticky; top: 0; background: white; border-radius: 12px 12px 0 0; z-index: 10;
+  }
+  .modal-header h2 { font-size: 18px; color: var(--primary); }
+  .modal-close {
+    background: none; border: none; font-size: 24px; cursor: pointer;
+    color: var(--text-light); padding: 4px 8px; border-radius: 4px;
+  }
+  .modal-close:hover { background: #f0f0f0; }
+  .modal-body { padding: 24px; }
+  .modal-footer {
+    padding: 16px 24px; border-top: 1px solid var(--border);
+    display: flex; gap: 12px; justify-content: flex-end;
+    position: sticky; bottom: 0; background: white; border-radius: 0 0 12px 12px;
+  }
+
+  /* Report preview */
+  .report-preview { font-family: "Noto Sans SC", "SimSun", "Hiragino Sans", sans-serif; line-height: 1.8; color: #333; }
+  .report-preview .report-header { text-align: center; border-bottom: 3px double var(--primary); padding-bottom: 16px; margin-bottom: 24px; }
+  .report-preview .company-name { font-size: 24px; font-weight: 700; color: var(--primary); letter-spacing: 4px; }
+  .report-preview .report-title { font-size: 20px; font-weight: 600; margin-top: 8px; color: var(--text); }
+  .report-preview .report-meta { display: flex; justify-content: space-between; font-size: 14px; color: var(--text-light); margin-top: 12px; padding: 8px 0; }
+  .report-preview .day-section { margin-bottom: 20px; page-break-inside: avoid; }
+  .report-preview .day-title { font-size: 16px; font-weight: 700; color: var(--primary); background: #edf2f7; padding: 8px 14px; border-left: 4px solid var(--primary); margin-bottom: 12px; }
+  .report-preview .category { margin-bottom: 10px; padding-left: 16px; }
+  .report-preview .category-title { font-size: 14px; font-weight: 600; color: var(--accent); margin-bottom: 4px; }
+  .report-preview .category-content { font-size: 13px; color: #4a5568; white-space: pre-wrap; padding-left: 8px; border-left: 2px solid #e2e8f0; }
+  .report-preview .consideration-block { margin-top: 24px; padding: 16px; border-top: 2px solid var(--border); page-break-inside: avoid; }
+  .report-preview .consideration-block .section-title { font-size: 17px; font-weight: 700; color: var(--primary); margin-bottom: 10px; }
+  .report-preview .consideration-block .section-content { font-size: 14px; color: #4a5568; white-space: pre-wrap; line-height: 1.8; }
+  .report-preview .summary-section { margin-top: 24px; padding-top: 16px; border-top: 2px solid var(--border); }
+  .report-preview .summary-title { font-size: 17px; font-weight: 700; color: var(--primary); margin-bottom: 12px; }
+  .report-preview .summary-table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 13px; }
+  .report-preview .summary-table th { background: var(--primary); color: white; padding: 8px 12px; text-align: left; font-weight: 600; }
+  .report-preview .summary-table td { padding: 8px 12px; border-bottom: 1px solid var(--border); }
+  .report-preview .summary-table tr:nth-child(even) td { background: #f7fafc; }
+  .report-preview .total-row td { font-weight: 700; border-top: 2px solid var(--primary); background: #edf2f7 !important; }
+  .report-preview .carry-mark { color: #975a16; font-weight: 600; font-size: 12px; }
+
+  .toast {
+    position: fixed; bottom: 30px; right: 30px; background: var(--success); color: white;
+    padding: 14px 24px; border-radius: 8px; font-weight: 600;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.2); transform: translateY(100px);
+    opacity: 0; transition: all 0.3s; z-index: 2000;
+  }
+  .toast.show { transform: translateY(0); opacity: 1; }
+
+  .loading {
+    display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(255,255,255,0.85); z-index: 3000;
+    justify-content: center; align-items: center; flex-direction: column; gap: 16px;
+  }
+  .loading.active { display: flex; }
+  .spinner { width: 48px; height: 48px; border: 4px solid var(--border); border-top-color: var(--primary); border-radius: 50%; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Hidden file input */
+  #importFile { display: none; }
+
+  @media (max-width: 768px) {
+    .meta-section { grid-template-columns: 1fr; }
+    .day-tabs { flex-wrap: wrap; }
+    .day-tab { padding: 8px 14px; font-size: 13px; }
+    .actions { flex-direction: column; align-items: stretch; }
+    .btn { justify-content: center; }
+    .task-item { flex-wrap: wrap; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1>美倫株式会社</h1>
+    <div class="subtitle">週次業務報告書作成ツール / 周工作报告生成工具</div>
+    <div class="version">v2.0</div>
+  </div>
+</div>
+
+<!-- Auto-save indicator -->
+<div class="save-indicator" id="saveIndicator">--</div>
+
+<div class="container">
+  <!-- Meta -->
+  <div class="meta-section">
+    <div>
+      <label>報告者 / 报告人</label>
+      <select id="reporter" onchange="autoSave()">
+        <option value="">-- 選択 --</option>
+        <option value="鬼武公洋">鬼武公洋</option>
+        <option value="松岡霞">松岡霞</option>
+      </select>
+    </div>
+    <div>
+      <label>部署 / 部门</label>
+      <input type="text" id="department" placeholder="例: 営業部" oninput="autoSave()">
+    </div>
+    <div>
+      <label>報告期間の開始日</label>
+      <input type="date" id="weekStart" onchange="updateDateRange(); autoSave();">
+    </div>
+  </div>
+  <div class="meta-section" style="grid-template-columns: 1fr;">
+    <div>
+      <label>報告期間 / 报告期间</label>
+      <input type="text" id="dateRange" readonly placeholder="開始日を選択すると自動で設定されます" style="background:#f7fafc;">
+    </div>
+  </div>
+
+  <!-- Tabs & panels -->
+  <div class="day-tabs" id="dayTabs"></div>
+  <div id="dayPanels"></div>
+
+  <!-- History -->
+  <div class="history-section">
+    <h3>
+      <span>過去の報告書データ</span>
+      <div style="display:flex;gap:6px;">
+        <button class="btn-sm-outline" onclick="exportJSON()">&#128229; JSONエクスポート</button>
+        <button class="btn-sm-outline" onclick="document.getElementById('importFile').click()">&#128228; JSONインポート</button>
+        <input type="file" id="importFile" accept=".json" onchange="importJSON(event)">
+      </div>
+    </h3>
+    <div class="history-list" id="historyList"></div>
+  </div>
+
+  <!-- Actions -->
+  <div class="actions">
+    <button class="btn btn-outline" onclick="clearAll()">&#128465; 新規作成</button>
+    <button class="btn btn-primary" onclick="previewReport()">&#128196; プレビュー（日本語）</button>
+    <button class="btn btn-accent" onclick="downloadPDF()">&#128196; 日本語PDF</button>
+    <button class="btn" style="background:#7c3aed;color:white;" onclick="copyForAI()">&#9889; AI週報用コピー → Coworkに貼付</button>
+    <button class="btn-sm-outline" style="margin-left:4px;" onclick="exportForAI()">&#128229; JSONファイル保存</button>
+  </div>
+  <p style="text-align:center;font-size:12px;color:var(--text-light);margin-top:8px;">
+    「AI仕上げ用エクスポート」→ Claudeに渡すと、自然な中国語翻訳＋考察の週間総括を自動生成してPDFにします
+  </p>
+</div>
+
+<!-- Modal -->
+<div class="modal-overlay" id="previewModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>報告書プレビュー</h2>
+      <button class="modal-close" onclick="closeModal()">&times;</button>
+    </div>
+    <div class="modal-body" id="reportPreview"></div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal()">閉じる</button>
+      <button class="btn btn-accent" onclick="closeModal();downloadPDF();">&#128196; PDFダウンロード</button>
+    </div>
+  </div>
+</div>
+
+<div class="loading" id="loading"><div class="spinner"></div><div>PDF生成中...</div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+// ============================================================
+// DATA VERSION — increment when data structure changes
+// ============================================================
+const DATA_VERSION = 2;
+const STORAGE_KEY = 'meirin_report_current';
+const HISTORY_KEY = 'meirin_report_history';
+
+// ============================================================
+// Config
+// ============================================================
+const DAYS = [
+  { key:'mon', ja:'月曜日', cn:'周一', short:'月' },
+  { key:'tue', ja:'火曜日', cn:'周二', short:'火' },
+  { key:'wed', ja:'水曜日', cn:'周三', short:'水' },
+  { key:'thu', ja:'木曜日', cn:'周四', short:'木' },
+  { key:'fri', ja:'金曜日', cn:'周五', short:'金' },
+  { key:'sat', ja:'土曜日', cn:'周六', short:'土' },
+];
+
+const tasks = {};
+DAYS.forEach(d => tasks[d.key] = []);
+
+const REPORTERS = { '鬼武公洋':'鬼武公洋', '松岡霞':'松冈霞' };
+
+// ============================================================
+// Translation
+// ============================================================
+const T = {
+  '見積もり':'报价','見積り':'报价','見積':'报价','請求書':'发票','納品書':'交货单','注文書':'订单',
+  '契約':'合同','契約書':'合同书','打ち合わせ':'会议','会議':'会议','ミーティング':'会议',
+  '商談':'商谈','提案':'提案','企画':'策划','納品':'交货','発送':'发货','出荷':'出货',
+  '入金':'入账','支払い':'付款','支払':'付款','問い合わせ':'咨询','問合せ':'咨询',
+  'クレーム':'投诉','苦情':'投诉','修正':'修改','変更':'变更','更新':'更新',
+  '確認':'确认','承認':'批准','許可':'许可','報告':'报告','連絡':'联络','相談':'协商',
+  '対応':'处理','完了':'完成','進行中':'进行中','保留':'保留','中止':'中止','延期':'延期',
+  '新規':'新增','既存':'现有','継続':'继续','顧客':'客户','取引先':'交易方',
+  'クライアント':'客户','お客様':'客户','担当者':'负责人','電話':'电话','メール':'邮件',
+  'FAX':'传真','訪問':'拜访','来社':'来公司','出張':'出差','資料':'资料','書類':'文件',
+  'データ':'数据','作成':'制作','送付':'发送','受領':'收到','検討':'研讨','調査':'调查',
+  '分析':'分析','開発':'开发','設計':'设计','製造':'制造','品質':'质量','管理':'管理',
+  '改善':'改善','売上':'销售额','利益':'利润','原価':'成本','予算':'预算',
+  '実績':'实际业绩','目標':'目标','達成':'达成','未達':'未达成','課題':'课题',
+  '改善点':'改善点','振り返り':'回顾','方針':'方针','計画':'计划','来週':'下周',
+  '今週':'本周','反省':'反省','成果':'成果','問題':'问题','原因':'原因','対策':'对策',
+  '結果':'结果','効果':'效果','要望':'要求','件':'件','円':'日元','万円':'万日元',
+  '千円':'千日元','株式会社':'株式会社','有限会社':'有限公司',
+  'した':'了','しました':'了','ました':'了','ている':'正在','ています':'正在',
+  'について':'关于','に対して':'针对','に関して':'关于','および':'以及',
+  'または':'或者','なお':'另外','ため':'因此','により':'由于','として':'作为',
+};
+const tKeys = Object.keys(T).sort((a,b)=>b.length-a.length);
+function tr(text) {
+  if (!text||!text.trim()) return '';
+  let r=text;
+  for (const k of tKeys) r=r.split(k).join(T[k]);
+  return r.replace(/(\d+)円/g,'$1日元');
+}
+
+// ============================================================
+// Data migration — handles old versions
+// ============================================================
+function migrateData(data) {
+  if (!data) return null;
+  const v = data._version || 1;
+
+  // v1 -> v2: old format used flat fields per day
+  if (v < 2 && data._tasks) {
+    // Already has _tasks, just stamp version
+    data._version = DATA_VERSION;
+    return data;
+  }
+  if (v < 2 && data.days && !data._tasks) {
+    // Convert old textarea-based days to task list
+    data._tasks = {};
+    DAYS.forEach(d => {
+      data._tasks[d.key] = [];
+      const dayData = data.days.find(dd => dd.key === d.key);
+      if (dayData) {
+        // Parse old received/handled/inProgress text fields
+        const received = (dayData.received || '').split('\n').filter(l => l.trim());
+        const handled = (dayData.handled || '').split('\n').filter(l => l.trim());
+        const inProg = (dayData.inProgress || '').split('\n').filter(l => l.trim());
+        const handledSet = new Set(handled.map(h => h.replace(/^【繰越】/,'').trim()));
+        const wipSet = new Set(inProg.map(w => w.replace(/^【繰越】/,'').trim()));
+
+        received.forEach(r => {
+          const clean = r.replace(/^【繰越】/,'').trim();
+          const carried = r.startsWith('【繰越】');
+          let status = 'new';
+          if (handledSet.has(clean)) status = 'done';
+          else if (wipSet.has(clean)) status = 'wip';
+          data._tasks[d.key].push({ text: clean, status, carried });
+        });
+        // Add any WIP items not in received
+        inProg.forEach(w => {
+          const clean = w.replace(/^【繰越】/,'').trim();
+          if (!received.some(r => r.replace(/^【繰越】/,'').trim() === clean)) {
+            data._tasks[d.key].push({ text: clean, status: 'wip', carried: w.startsWith('【繰越】') });
+          }
+        });
+      }
+    });
+    data._version = DATA_VERSION;
+    return data;
+  }
+
+  data._version = DATA_VERSION;
+  return data;
+}
+
+// ============================================================
+// Build UI
+// ============================================================
+function buildTabs() {
+  const tabsEl = document.getElementById('dayTabs');
+  const panelsEl = document.getElementById('dayPanels');
+
+  DAYS.forEach((day, i) => {
+    const tab = document.createElement('button');
+    tab.className = 'day-tab' + (i===0?' active':'');
+    tab.innerHTML = day.short+'<span class="dot"></span>';
+    tab.onclick = () => switchDay(i);
+    tab.id = 'tab-'+day.key;
+    tabsEl.appendChild(tab);
+
+    const panel = document.createElement('div');
+    panel.className = 'day-content' + (i===0?' active':'');
+    panel.id = 'panel-'+day.key;
+    panel.innerHTML = `
+      <h3>${day.ja} &nbsp;${day.cn}</h3>
+      ${i>0?`<div class="carry-over-bar" id="carry-bar-${day.key}" style="display:none;">
+        <div class="info"><strong>&#8592;</strong> <span id="carry-info-${day.key}"></span></div>
+        <button onclick="doCarryOver('${day.key}',${i})">繰り越す</button>
+      </div>`:''}
+      <div class="task-section">
+        <div class="task-section-title">
+          受けた依頼・対応案件 <span class="cn">收到的委托・处理案件</span>
+          <span class="count" id="count-${day.key}">0</span>
+        </div>
+        <div class="add-task-row">
+          <input type="text" id="input-${day.key}" placeholder="依頼内容を入力してEnter"
+            onkeydown="if(event.key==='Enter'){addTask('${day.key}');event.preventDefault();}">
+          <button onclick="addTask('${day.key}')">+ 追加</button>
+        </div>
+        <div id="tasklist-${day.key}"></div>
+      </div>
+      <div class="auto-panel">
+        <div class="auto-panel-title"><span class="label-done">&#10003; 対応した依頼</span> <span class="cn">已处理的委托</span></div>
+        <div id="done-${day.key}"><span class="empty-msg">「対応済」で自動反映</span></div>
+      </div>
+      <div class="auto-panel">
+        <div class="auto-panel-title"><span class="label-wip">&#9659; 対応中の案件</span> <span class="cn">处理中的案件</span></div>
+        <div id="wip-${day.key}"><span class="empty-msg">「対応中」で自動反映 &#8594; 翌日に自動繰越</span></div>
+      </div>
+      <div class="field-group">
+        <label>営業成果 <span class="cn-label">营业成果</span></label>
+        <textarea id="${day.key}_salesResult" rows="2" placeholder="営業活動の成果" oninput="autoSave()"></textarea>
+      </div>
+      <div class="field-group">
+        <label>売上（円） <span class="cn-label">销售额（日元）</span></label>
+        <input type="number" id="${day.key}_revenue" placeholder="0" min="0" step="1" oninput="autoSave()">
+      </div>
+      <div class="field-group">
+        <label>その他・備考 <span class="cn-label">其他 / 备注</span></label>
+        <textarea id="${day.key}_notes" rows="2" placeholder="補足事項" oninput="autoSave()"></textarea>
+      </div>
+      <div class="daily-note-section">
+        <div class="note-title">&#128221; 今日の考察・所感 <span class="cn">今日的考察与感想</span></div>
+        <textarea id="${day.key}_consideration" rows="3" placeholder="今日の気づき、課題、改善点、反省など" oninput="autoSave()"></textarea>
+      </div>`;
+    panelsEl.appendChild(panel);
+  });
+}
+
+function switchDay(i) {
+  document.querySelectorAll('.day-tab').forEach((t,j)=>t.classList.toggle('active',j===i));
+  document.querySelectorAll('.day-content').forEach((p,j)=>p.classList.toggle('active',j===i));
+}
+
+// ============================================================
+// Task management
+// ============================================================
+function addTask(dk, text, status, carried) {
+  const input = document.getElementById('input-'+dk);
+  const t = text || (input?input.value.trim():'');
+  if (!t) return;
+  tasks[dk].push({ text:t, status:status||'new', carried:carried||false });
+  if (input&&!text) input.value='';
+  renderTasks(dk); checkCarryOver(); autoSave();
+}
+
+function removeTask(dk, idx) {
+  tasks[dk].splice(idx,1);
+  renderTasks(dk); checkCarryOver(); autoSave();
+}
+
+function setStatus(dk, idx, status) {
+  const t=tasks[dk][idx];
+  t.status = (t.status===status)?'new':status;
+  renderTasks(dk); checkCarryOver(); autoSave();
+}
+
+function renderTasks(dk) {
+  const list=document.getElementById('tasklist-'+dk);
+  const doneEl=document.getElementById('done-'+dk);
+  const wipEl=document.getElementById('wip-'+dk);
+  const countEl=document.getElementById('count-'+dk);
+  const dt=tasks[dk];
+
+  let html='';
+  dt.forEach((t,i)=>{
+    const cls=t.status==='done'?'status-done':t.status==='wip'?'status-wip':'';
+    const badge=t.carried?'<span class="carry-badge">繰越</span>':'';
+    html+=`<div class="task-item ${cls}">
+      <div class="task-text">${badge}${esc(t.text)}</div>
+      <div class="task-actions">
+        <button class="status-btn btn-done ${t.status==='done'?'active':''}" onclick="setStatus('${dk}',${i},'done')">対応済</button>
+        <button class="status-btn btn-wip ${t.status==='wip'?'active':''}" onclick="setStatus('${dk}',${i},'wip')">対応中</button>
+        <button class="status-btn btn-del" onclick="removeTask('${dk}',${i})">&times;</button>
+      </div>
+    </div>`;
+  });
+  list.innerHTML=html;
+  countEl.textContent=dt.length;
+
+  const done=dt.filter(t=>t.status==='done');
+  doneEl.innerHTML=done.length?done.map(t=>`<div class="auto-item">${t.carried?'<span style="color:#975a16;font-size:11px;">[繰越] </span>':''}${esc(t.text)}</div>`).join(''):'<span class="empty-msg">「対応済」で自動反映</span>';
+
+  const wip=dt.filter(t=>t.status==='wip');
+  wipEl.innerHTML=wip.length?wip.map(t=>`<div class="auto-item">${t.carried?'<span style="color:#975a16;font-size:11px;">[繰越] </span>':''}${esc(t.text)}</div>`).join(''):'<span class="empty-msg">「対応中」で自動反映 &#8594; 翌日に自動繰越</span>';
+
+  const tab=document.getElementById('tab-'+dk);
+  const hasData=dt.length>0||(document.getElementById(dk+'_salesResult')&&document.getElementById(dk+'_salesResult').value.trim())||(document.getElementById(dk+'_revenue')&&document.getElementById(dk+'_revenue').value&&document.getElementById(dk+'_revenue').value!=='0')||(document.getElementById(dk+'_consideration')&&document.getElementById(dk+'_consideration').value.trim());
+  if(tab) tab.classList.toggle('has-data',hasData);
+}
+
+function checkCarryOver() {
+  DAYS.forEach((day,i)=>{
+    if(i===0) return;
+    const bar=document.getElementById('carry-bar-'+day.key);
+    if(!bar) return;
+    const prev=DAYS[i-1];
+    const wipItems=tasks[prev.key].filter(t=>t.status==='wip');
+    const existing=tasks[day.key].filter(t=>t.carried).map(t=>t.text);
+    const toCarry=wipItems.filter(t=>!existing.includes(t.text));
+    if(toCarry.length>0){
+      bar.style.display='flex';
+      document.getElementById('carry-info-'+day.key).innerHTML=`<strong>${prev.ja}</strong>から<strong>${toCarry.length}件</strong>の対応中案件`;
+    } else { bar.style.display='none'; }
+  });
+}
+
+function doCarryOver(dk,di) {
+  const prev=DAYS[di-1];
+  const wipItems=tasks[prev.key].filter(t=>t.status==='wip');
+  const existing=tasks[dk].filter(t=>t.carried).map(t=>t.text);
+  let c=0;
+  wipItems.forEach(t=>{
+    if(!existing.includes(t.text)){ tasks[dk].push({text:t.text,status:'wip',carried:true}); c++; }
+  });
+  renderTasks(dk); checkCarryOver(); autoSave();
+  showToast(`${c}件を繰り越しました`);
+}
+
+function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+
+// ============================================================
+// Date
+// ============================================================
+function updateDateRange() {
+  const si=document.getElementById('weekStart');
+  if(!si.value) return;
+  const s=new Date(si.value); const dow=s.getDay();
+  const mon=new Date(s);
+  if(dow!==1){mon.setDate(mon.getDate()+(dow===0?-6:1-dow));si.value=fmtISO(mon);}
+  const sat=new Date(mon);sat.setDate(mon.getDate()+5);
+  const w=['日','月','火','水','木','金','土'];
+  document.getElementById('dateRange').value=`${mon.getFullYear()}年${mon.getMonth()+1}月${mon.getDate()}日（${w[mon.getDay()]}）～ ${sat.getFullYear()}年${sat.getMonth()+1}月${sat.getDate()}日（${w[sat.getDay()]}）`;
+}
+function fmtISO(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function getDateRangeCN(){
+  const dr=document.getElementById('dateRange').value;if(!dr)return '';
+  return dr.replace(/（月）/g,'(周一)').replace(/（火）/g,'(周二)').replace(/（水）/g,'(周三)')
+    .replace(/（木）/g,'(周四)').replace(/（金）/g,'(周五)').replace(/（土）/g,'(周六)')
+    .replace(/（日）/g,'(周日)').replace(/～/g,' ~ ');
+}
+function getDeptCN(d){
+  const m={'営業部':'营业部','総務部':'总务部','経理部':'财务部','企画部':'企划部','開発部':'开发部','製造部':'制造部','品質管理部':'质量管理部','人事部':'人事部','技術部':'技术部','管理部':'管理部'};
+  return m[d]||tr(d)||d;
+}
+
+// ============================================================
+// AUTO-SAVE — saves every change to localStorage
+// ============================================================
+let saveTimer = null;
+function autoSave() {
+  clearTimeout(saveTimer);
+  const ind = document.getElementById('saveIndicator');
+  ind.textContent = '保存中...'; ind.className = 'save-indicator saving';
+  saveTimer = setTimeout(() => {
+    const data = collectData();
+    data._version = DATA_VERSION;
+    data._savedAt = new Date().toISOString();
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      ind.textContent = '自動保存済 ' + new Date().toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'});
+      ind.className = 'save-indicator saved';
+    } catch(e) {
+      ind.textContent = '保存失敗'; ind.className = 'save-indicator';
+    }
+  }, 500);
+}
+
+// ============================================================
+// Collect
+// ============================================================
+function collectData() {
+  const rep=document.getElementById('reporter').value;
+  const data={
+    _version: DATA_VERSION,
+    reporter:rep, reporterCN:REPORTERS[rep]||rep,
+    department:document.getElementById('department').value,
+    weekStart:document.getElementById('weekStart').value,
+    dateRange:document.getElementById('dateRange').value,
+    dateRangeCN:getDateRangeCN(),
+    departmentCN:getDeptCN(document.getElementById('department').value),
+    _tasks:{},
+    days:[],
+  };
+  DAYS.forEach(day=>{
+    data._tasks[day.key]=tasks[day.key];
+    const dt=tasks[day.key];
+    const received=dt.map(t=>(t.carried?'【繰越】':'')+t.text);
+    const handled=dt.filter(t=>t.status==='done').map(t=>(t.carried?'【繰越】':'')+t.text);
+    const inProgress=dt.filter(t=>t.status==='wip').map(t=>(t.carried?'【繰越】':'')+t.text);
+    const sr=document.getElementById(day.key+'_salesResult').value;
+    const rv=document.getElementById(day.key+'_revenue').value;
+    const nt=document.getElementById(day.key+'_notes').value;
+    const co=document.getElementById(day.key+'_consideration').value;
+    const has=dt.length>0||(sr&&sr.trim())||(rv&&rv!=='0')||(nt&&nt.trim())||(co&&co.trim());
+    data.days.push({key:day.key,ja:day.ja,cn:day.cn,received,handled,inProgress,salesResult:sr,revenue:rv,notes:nt,consideration:co,hasContent:has});
+  });
+  return data;
+}
+
+// ============================================================
+// Restore from saved data
+// ============================================================
+function restoreData(data) {
+  if(!data) return;
+  data = migrateData(data);
+
+  document.getElementById('reporter').value=data.reporter||'';
+  document.getElementById('department').value=data.department||'';
+  if(data.weekStart){document.getElementById('weekStart').value=data.weekStart;updateDateRange();}
+  else if(data.dateRange){document.getElementById('dateRange').value=data.dateRange;}
+
+  // Migrate old weekly consideration into Monday if exists
+  if(data.consideration && typeof data.consideration === 'object' && data.consideration.review) {
+    const monCon = document.getElementById('mon_consideration');
+    if(monCon && !monCon.value) {
+      const parts = [];
+      if(data.consideration.review) parts.push(data.consideration.review);
+      if(data.consideration.plan) parts.push('【方針】' + data.consideration.plan);
+      if(data.consideration.other) parts.push(data.consideration.other);
+      monCon.value = parts.join('\n');
+    }
+  }
+
+  if(data._tasks){
+    DAYS.forEach(d=>{
+      tasks[d.key]=data._tasks[d.key]||[];
+      renderTasks(d.key);
+    });
+  }
+  if(data.days){
+    data.days.forEach(day=>{
+      ['salesResult','revenue','notes','consideration'].forEach(f=>{
+        const el=document.getElementById(day.key+'_'+f);
+        if(el) el.value=day[f]||'';
+      });
+    });
+  }
+  checkCarryOver();
+}
+
+// ============================================================
+// History management — archive finished weeks
+// ============================================================
+function getHistory(){
+  try{return JSON.parse(localStorage.getItem(HISTORY_KEY)||'[]');}
+  catch(e){return [];}
+}
+function saveHistory(list){
+  try{localStorage.setItem(HISTORY_KEY,JSON.stringify(list));}catch(e){}
+}
+
+function archiveCurrent() {
+  const data=collectData();
+  if(!data.dateRange){showToast('報告期間を設定してください');return;}
+  const hasTasks=DAYS.some(d=>tasks[d.key].length>0);
+  if(!hasTasks){showToast('データがありません');return;}
+  data._archivedAt=new Date().toISOString();
+  data._version=DATA_VERSION;
+  const hist=getHistory();
+  // Replace if same date range exists
+  const idx=hist.findIndex(h=>h.dateRange===data.dateRange && h.reporter===data.reporter);
+  if(idx>=0) hist[idx]=data; else hist.unshift(data);
+  saveHistory(hist);
+  renderHistory();
+  showToast('履歴に保存しました');
+}
+
+function loadFromHistory(index) {
+  const hist=getHistory();
+  if(!hist[index]) return;
+  if(!confirm('現在の入力を上書きしますがよろしいですか？')) return;
+  restoreData(hist[index]);
+  autoSave();
+  showToast('過去データを読み込みました');
+}
+
+function deleteHistory(index) {
+  if(!confirm('この履歴を削除しますか？')) return;
+  const hist=getHistory();
+  hist.splice(index,1);
+  saveHistory(hist);
+  renderHistory();
+  showToast('削除しました');
+}
+
+function renderHistory() {
+  const hist=getHistory();
+  const el=document.getElementById('historyList');
+  if(!hist.length){ el.innerHTML='<div class="no-history">保存された報告書はありません。PDFダウンロード時に自動保存されます。</div>'; return; }
+  el.innerHTML=hist.map((h,i)=>`
+    <div class="history-item">
+      <div class="hi-info">
+        <span class="hi-date">${h.dateRange||'日付不明'}</span>
+        <span class="hi-reporter">${h.reporter||''}</span>
+      </div>
+      <div class="hi-actions">
+        <button class="hi-btn" onclick="loadFromHistory(${i})">読込</button>
+        <button class="hi-btn del" onclick="deleteHistory(${i})">&times;</button>
+      </div>
+    </div>`).join('');
+}
+
+// ============================================================
+// JSON Export / Import — portable backup
+// ============================================================
+function exportJSON() {
+  const allData = {
+    _exportVersion: DATA_VERSION,
+    _exportDate: new Date().toISOString(),
+    current: collectData(),
+    history: getHistory(),
+  };
+  const blob = new Blob([JSON.stringify(allData,null,2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href=url;
+  a.download=`美倫_報告データ_${fmtISO(new Date())}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('JSONをエクスポートしました');
+}
+
+// ============================================================
+// AI仕上げ用エクスポート — current week only, readable format
+// ============================================================
+function copyForAI() {
+  const data = collectData();
+  const hasAny = data.days.some(d => d.hasContent);
+  if (!hasAny) { showToast('データがありません。まず業務内容を入力してください。'); return; }
+
+  let text = '【週報作成依頼】以下の日本語データから中国語の週次業務報告書PDFを作成してください。\n\n';
+  text += `会社名: 美倫株式会社\n`;
+  text += `報告者: ${data.reporter || '未選択'}\n`;
+  text += `部署: ${data.department || ''}\n`;
+  text += `報告期間: ${data.dateRange || ''}\n`;
+  text += `週開始日: ${data.weekStart || ''}\n`;
+  text += '\n========================================\n';
+
+  data.days.forEach(day => {
+    if (!day.hasContent) return;
+    text += `\n【${day.ja}】\n`;
+    if (day.received.length) {
+      text += '  ■ 受けた依頼・対応案件:\n';
+      day.received.forEach(t => text += `    - ${t}\n`);
+    }
+    if (day.handled.length) {
+      text += '  ■ 対応した依頼:\n';
+      day.handled.forEach(t => text += `    - ${t}\n`);
+    }
+    if (day.inProgress.length) {
+      text += '  ■ 対応中の案件:\n';
+      day.inProgress.forEach(t => text += `    - ${t}\n`);
+    }
+    if (day.salesResult && day.salesResult.trim())
+      text += `  ■ 営業成果: ${day.salesResult}\n`;
+    if (day.revenue && day.revenue !== '0')
+      text += `  ■ 売上: ${parseInt(day.revenue).toLocaleString()}円\n`;
+    if (day.notes && day.notes.trim())
+      text += `  ■ 備考: ${day.notes}\n`;
+    if (day.consideration && day.consideration.trim())
+      text += `  ■ 今日の考察: ${day.consideration}\n`;
+  });
+
+  text += '\n========================================\n';
+  text += '上記を自然な中国語に翻訳し、日々の考察から週次サマリー（概要・成果・課題・来週の計画）を生成して、PDF報告書を作成してください。\n';
+
+  // file://でも動くコピー方法
+  let copied = false;
+  try {
+    // 方法1: execCommand (file://でも動作する)
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.cssText = 'position:fixed;left:-9999px;top:0;';
+    document.body.appendChild(ta);
+    ta.select();
+    copied = document.execCommand('copy');
+    document.body.removeChild(ta);
+  } catch(e) { copied = false; }
+
+  if (!copied) {
+    // 方法2: clipboard API
+    try {
+      navigator.clipboard.writeText(text).then(() => {
+        showToast('コピーしました！ → Coworkに貼り付けてください（Ctrl+V）');
+      }).catch(() => { showCopyDialog(text); });
+      return;
+    } catch(e) { /* fallthrough */ }
+  }
+
+  if (copied) {
+    showToast('コピーしました！ → Coworkに貼り付けてください（Ctrl+V）');
+  } else {
+    showCopyDialog(text);
+  }
+}
+
+function showCopyDialog(text) {
+  // コピー失敗時: 手動コピー用ダイアログ（プレビューモーダルとは別）
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;';
+  const box = document.createElement('div');
+  box.style.cssText = 'background:white;border-radius:12px;padding:24px;max-width:700px;width:90%;max-height:80vh;display:flex;flex-direction:column;';
+  box.innerHTML = '<h3 style="margin-bottom:12px;color:#1a365d;">Coworkに貼り付けるデータ</h3>' +
+    '<p style="margin-bottom:12px;color:#718096;font-size:13px;">下のテキストをクリックして全選択 → Ctrl+C でコピー → Coworkに貼り付けてください</p>' +
+    '<textarea id="copyDialogText" style="width:100%;height:350px;font-size:11px;font-family:monospace;border:1px solid #e2e8f0;border-radius:6px;padding:10px;resize:none;" readonly>' +
+    text.replace(/</g,'&lt;') + '</textarea>' +
+    '<div style="margin-top:12px;text-align:right;">' +
+    '<button style="padding:8px 20px;background:#e2e8f0;border:none;border-radius:6px;cursor:pointer;font-size:14px;margin-right:8px;" onclick="this.closest(\'div[style]\').parentElement.remove()">閉じる</button>' +
+    '<button style="padding:8px 20px;background:#1a365d;color:white;border:none;border-radius:6px;cursor:pointer;font-size:14px;" onclick="document.getElementById(\'copyDialogText\').select();document.execCommand(\'copy\');this.textContent=\'コピーしました！\';">全選択してコピー</button>' +
+    '</div>';
+  overlay.appendChild(box);
+  overlay.addEventListener('click', e => { if(e.target === overlay) overlay.remove(); });
+  document.body.appendChild(overlay);
+  setTimeout(() => document.getElementById('copyDialogText').select(), 100);
+}
+
+function exportForAI() {
+  const data = collectData();
+  const hasAny = data.days.some(d => d.hasContent);
+  if (!hasAny) { showToast('データがありません。まず業務内容を入力してください。'); return; }
+
+  // AI処理用の構造化データ
+  const exportData = {
+    _type: 'miron_weekly_report',
+    _version: 1,
+    company: '美倫株式会社',
+    reporter: data.reporter || '未選択',
+    department: data.department || '',
+    dateRange: data.dateRange || '',
+    weekStart: data.weekStart || '',
+    exportDate: new Date().toISOString(),
+    days: [],
+    instructions: 'このデータを中国語に翻訳し、週次業務報告書PDFを作成してください。日々の考察は「本周考察与总结」にまとめてください。'
+  };
+
+  data.days.forEach(day => {
+    if (!day.hasContent) return;
+    exportData.days.push({
+      dayLabel: day.ja,
+      received: day.received,
+      handled: day.handled,
+      inProgress: day.inProgress,
+      salesResult: day.salesResult || '',
+      revenue: day.revenue || '0',
+      notes: day.notes || '',
+      consideration: day.consideration || ''
+    });
+  });
+
+  const jsonText = JSON.stringify(exportData, null, 2);
+
+  // ダウンロード
+  try {
+    const blob = new Blob([jsonText], {type:'application/json;charset=utf-8'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const rep = data.reporter || '';
+    const ds = document.getElementById('weekStart').value || 'report';
+    const fname = `美倫_週報データ_${rep}_${ds}.json`;
+    a.download = fname;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    showToast(`「${fname}」を保存しました → Coworkにドロップして「週報作成」と指示してください`);
+  } catch(e) {
+    navigator.clipboard.writeText(jsonText).then(() => {
+      showToast('クリップボードにコピーしました → Coworkに貼り付けて「週報作成」と指示してください');
+    }).catch(() => {
+      const md = document.getElementById('reportModal');
+      document.getElementById('reportContent').innerHTML =
+        '<p style="margin-bottom:10px;font-weight:bold;">以下をコピーしてCoworkに貼り付けてください:</p>' +
+        '<textarea style="width:100%;height:400px;font-size:13px;font-family:monospace;" readonly>' +
+        jsonText.replace(/</g,'&lt;') + '</textarea>';
+      md.style.display = 'flex';
+    });
+  }
+}
+
+function importJSON(event) {
+  const file=event.target.files[0];
+  if(!file) return;
+  const reader=new FileReader();
+  reader.onload=function(e){
+    try{
+      const data=JSON.parse(e.target.result);
+      if(data.history){
+        const hist=getHistory();
+        data.history.forEach(h=>{
+          h=migrateData(h);
+          const dup=hist.findIndex(x=>x.dateRange===h.dateRange&&x.reporter===h.reporter);
+          if(dup>=0) hist[dup]=h; else hist.unshift(h);
+        });
+        saveHistory(hist);
+        renderHistory();
+      }
+      if(data.current){
+        restoreData(migrateData(data.current));
+        autoSave();
+      }
+      showToast('インポートしました');
+    }catch(err){alert('ファイル読込エラー: '+err.message);}
+  };
+  reader.readAsText(file);
+  event.target.value='';
+}
+
+// ============================================================
+// Report HTML
+// ============================================================
+function generateReportHTML(data) {
+  let html=`
+<div class="report-preview" id="reportContent">
+  <div class="report-header">
+    <div class="company-name">美倫株式会社</div>
+    <div class="report-title">週次業務報告書</div>
+    <div class="report-meta">
+      <span>報告者: ${data.reporter||'—'}　　部署: ${data.department||'—'}</span>
+      <span>報告期間: ${data.dateRange||'—'}</span>
+    </div>
+  </div>`;
+  let totalRev=0;
+  data.days.forEach(day=>{
+    if(!day.hasContent) return;
+    html+=`<div class="day-section"><div class="day-title">${day.ja}</div>`;
+    if(day.received.length){
+      html+=`<div class="category"><div class="category-title">受けた依頼・対応案件 (${day.received.length}件)</div><div class="category-content">`;
+      day.received.forEach(t=>{const c=t.replace(/^【繰越】/,'');const ic=t.startsWith('【繰越】');html+=(ic?'<span class="carry-mark">【繰越】</span>':'')+c+'\n';});
+      html+=`</div></div>`;
+    }
+    if(day.handled.length){
+      html+=`<div class="category"><div class="category-title">対応した依頼 (${day.handled.length}件)</div><div class="category-content">`;
+      day.handled.forEach(t=>{const c=t.replace(/^【繰越】/,'');const ic=t.startsWith('【繰越】');html+=(ic?'<span class="carry-mark">【繰越】</span>':'')+c+'\n';});
+      html+=`</div></div>`;
+    }
+    if(day.inProgress.length){
+      html+=`<div class="category"><div class="category-title">対応中の案件 (${day.inProgress.length}件)</div><div class="category-content">`;
+      day.inProgress.forEach(t=>{const c=t.replace(/^【繰越】/,'');const ic=t.startsWith('【繰越】');html+=(ic?'<span class="carry-mark">【繰越】</span>':'')+c+'\n';});
+      html+=`</div></div>`;
+    }
+    if(day.salesResult&&day.salesResult.trim()) html+=`<div class="category"><div class="category-title">営業成果</div><div class="category-content">${day.salesResult}</div></div>`;
+    if(day.revenue&&day.revenue!=='0'){const n=parseInt(day.revenue)||0;totalRev+=n;html+=`<div class="category"><div class="category-title">売上</div><div class="category-content">${n.toLocaleString()}円</div></div>`;}
+    if(day.notes&&day.notes.trim()) html+=`<div class="category"><div class="category-title">備考</div><div class="category-content">${day.notes}</div></div>`;
+    html+=`</div>`;
+  });
+  // Aggregate daily considerations into weekly section
+  const dailyNotes=data.days.filter(d=>d.consideration&&d.consideration.trim());
+  if(dailyNotes.length){
+    html+=`<div class="consideration-block"><div class="section-title">今週の考察</div>`;
+    dailyNotes.forEach(d=>{
+      html+=`<div style="margin-bottom:14px;">
+        <div style="font-weight:600;color:var(--primary);font-size:14px;margin-bottom:4px;padding-left:4px;border-left:3px solid var(--primary);">${d.ja}</div>
+        <div class="section-content" style="padding-left:12px;">${d.consideration}</div>
+      </div>`;
+    });
+    html+=`</div>`;
+  }
+  html+=`<div class="summary-section"><div class="summary-title">週間集計</div>
+    <table class="summary-table"><thead><tr><th>日付</th><th>受けた依頼</th><th>対応済</th><th>対応中</th><th>売上</th></tr></thead><tbody>`;
+  let tR=0,tH=0,tW=0;
+  data.days.forEach(day=>{if(!day.hasContent)return;const rc=day.received.length,hc=day.handled.length,wc=day.inProgress.length,rv=parseInt(day.revenue)||0;tR+=rc;tH+=hc;tW+=wc;html+=`<tr><td>${day.ja}</td><td>${rc}件</td><td>${hc}件</td><td>${wc}件</td><td>${rv.toLocaleString()}円</td></tr>`;});
+  html+=`<tr class="total-row"><td>合計</td><td>${tR}件</td><td>${tH}件</td><td>${tW}件</td><td>${totalRev.toLocaleString()}円</td></tr></tbody></table></div></div>`;
+  return html;
+}
+
+// ============================================================
+// Preview / PDF
+// ============================================================
+function previewReport(){
+  const data = collectData();
+  const hasAny = data.days.some(d => d.hasContent);
+  if(!hasAny){ showToast('データがありません。まず業務内容を入力してください。'); return; }
+  document.getElementById('reportPreview').innerHTML=generateReportHTML(data);
+  document.getElementById('previewModal').classList.add('active');
+}
+function closeModal(){document.getElementById('previewModal').classList.remove('active');}
+
+function downloadPDF(){
+  // データチェック
+  const data = collectData();
+  const hasAny = data.days.some(d => d.hasContent);
+  if(!hasAny){ showToast('データがありません。まず業務内容を入力してください。'); return; }
+
+  // Auto-archive before PDF
+  archiveCurrent();
+
+  // 印刷用の新しいウィンドウを開いてPDF保存（ブラウザの「PDFに保存」機能を使用）
+  const rpt = generateReportHTML(data);
+  const printWindow = window.open('', '_blank');
+  if(!printWindow){
+    alert('ポップアップがブロックされました。\nブラウザの設定でこのページのポップアップを許可してください。');
+    return;
+  }
+  const rep = data.reporter || '';
+  const ds = document.getElementById('weekStart').value || '';
+
+  printWindow.document.write(`<!DOCTYPE html>
+<html><head><meta charset="UTF-8">
+<title>美倫_週報_${rep}_${ds}</title>
+<style>
+  @page { margin: 15mm; size: A4; }
+  body { font-family: "Hiragino Sans", "Yu Gothic", "Noto Sans JP", sans-serif; color: #2d3748; line-height: 1.6; margin: 0; padding: 20px; }
+  .report-preview { max-width: 800px; margin: 0 auto; }
+  .report-header { text-align: center; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid #1a365d; }
+  .company-name { font-size: 22px; font-weight: 700; color: #1a365d; }
+  .report-title { font-size: 16px; color: #2d3748; margin-top: 4px; }
+  .report-meta { font-size: 11px; color: #718096; margin-top: 8px; }
+  .report-meta span { display: block; }
+  .day-section { margin-bottom: 16px; page-break-inside: avoid; }
+  .day-title { background: #edf2f7; padding: 6px 12px; font-size: 14px; font-weight: 700; color: #1a365d; border-left: 4px solid #1a365d; margin-bottom: 8px; }
+  .category { margin-bottom: 8px; padding-left: 8px; }
+  .category-title { font-size: 11px; font-weight: 600; color: #c53030; margin-bottom: 4px; }
+  .category-content { font-size: 11px; white-space: pre-line; padding-left: 10px; line-height: 1.7; }
+  .carry-mark { color: #975a16; font-weight: 600; }
+  .consideration-block { margin-top: 16px; padding-top: 12px; border-top: 2px solid #1a365d; page-break-inside: avoid; }
+  .section-title { font-size: 15px; font-weight: 700; color: #1a365d; margin-bottom: 12px; }
+  .section-content { font-size: 11px; line-height: 1.7; }
+  .summary-section { margin-top: 16px; padding-top: 12px; border-top: 1px solid #cbd5e0; page-break-inside: avoid; }
+  .summary-title { font-size: 14px; font-weight: 700; color: #1a365d; margin-bottom: 8px; }
+  .summary-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  .summary-table th { background: #1a365d; color: white; padding: 6px 8px; text-align: left; }
+  .summary-table td { padding: 5px 8px; border-bottom: 1px solid #e2e8f0; }
+  .summary-table tr:nth-child(even) { background: #f7fafc; }
+  .total-row { font-weight: 700; background: #edf2f7 !important; }
+  .total-row td { border-top: 2px solid #1a365d; }
+  @media print {
+    body { padding: 0; }
+    .no-print { display: none; }
+  }
+</style>
+</head><body>
+${rpt}
+<div class="no-print" style="text-align:center;margin:30px 0;padding:20px;">
+  <p style="margin-bottom:12px;color:#718096;font-size:13px;">印刷ダイアログで「PDFに保存」を選択してください</p>
+  <button onclick="window.print()" style="padding:10px 30px;font-size:14px;background:#1a365d;color:white;border:none;border-radius:6px;cursor:pointer;">PDF保存 / 印刷</button>
+</div>
+</body></html>`);
+  printWindow.document.close();
+
+  // 少し待ってから印刷ダイアログを表示
+  setTimeout(() => {
+    printWindow.print();
+    showToast('印刷ダイアログで「PDFに保存」を選んでください');
+  }, 500);
+}
+
+// ============================================================
+// Clear (new report)
+// ============================================================
+function clearAll(){
+  if(!confirm('新しい報告書を作成しますか？\n（現在の入力はクリアされますが、履歴に自動保存されます）')) return;
+  // Auto-archive if has data
+  const hasAny=DAYS.some(d=>tasks[d.key].length>0);
+  if(hasAny) archiveCurrent();
+
+  document.getElementById('reporter').value='';
+  document.getElementById('department').value='';
+  document.getElementById('weekStart').value='';
+  document.getElementById('dateRange').value='';
+  DAYS.forEach(d=>{
+    tasks[d.key]=[];
+    renderTasks(d.key);
+    ['salesResult','revenue','notes','consideration'].forEach(f=>{const el=document.getElementById(d.key+'_'+f);if(el)el.value='';});
+  });
+  checkCarryOver();
+
+  // Set new week date
+  const today=new Date();const dow=today.getDay();
+  const mon=new Date(today);mon.setDate(mon.getDate()+(dow===0?-6:1-dow));
+  document.getElementById('weekStart').value=fmtISO(mon);
+  updateDateRange();
+  autoSave();
+  showToast('新規作成しました');
+}
+
+// ============================================================
+// Toast & Init
+// ============================================================
+function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500);}
+
+// BUILD
+buildTabs();
+
+// Set default date
+const today=new Date();const d=today.getDay();
+const m=new Date(today);m.setDate(m.getDate()+(d===0?-6:1-d));
+document.getElementById('weekStart').value=fmtISO(m);
+updateDateRange();
+
+// RESTORE saved data
+try{
+  const saved=localStorage.getItem(STORAGE_KEY);
+  if(saved){
+    const data=JSON.parse(saved);
+    restoreData(data);
+    const ind=document.getElementById('saveIndicator');
+    if(data._savedAt){
+      const dt=new Date(data._savedAt);
+      ind.textContent='前回: '+dt.toLocaleString('ja-JP',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});
+      ind.className='save-indicator saved';
+    }
+  }
+  // Also try migrating old key format
+  const oldSaved=localStorage.getItem('meirin_weekly_report');
+  if(oldSaved && !saved){
+    const oldData=JSON.parse(oldSaved);
+    restoreData(migrateData(oldData));
+    autoSave();
+    localStorage.removeItem('meirin_weekly_report'); // clean up
+  }
+} catch(e){}
+
+renderHistory();
+</script>
+</body>
+</html>
