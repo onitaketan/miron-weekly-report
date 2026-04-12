@@ -737,8 +737,11 @@ function switchWeek() {
   const keepReporter = document.getElementById('reporter').value;
   const keepDept = document.getElementById('department').value;
 
-  // 1. Archive current week BEFORE updating date range (so collectData reads OLD weekStart)
+  // 1. Archive current week — temporarily restore old weekStart so collectData reads correct key
   if(_lastWeekStart) {
+    const si = document.getElementById('weekStart');
+    si.value = _lastWeekStart;  // restore old week in DOM for correct archiving
+    updateDateRange();           // match dateRange to old week
     const hasAny = DAYS.some(d => tasks[d.key].length > 0) ||
       DAYS.some(d => {
         const sr = document.getElementById(d.key+'_salesResult').value;
