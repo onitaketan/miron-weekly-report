@@ -750,7 +750,7 @@ function switchWeek() {
   // 2. Collect weekend WIP tasks from old week BEFORE clearing
   const weekendWIP = [];
   if(_lastWeekStart) {
-    ['sat','sun'].forEach(dk => {
+    ['sat'].forEach(dk => {
       tasks[dk].filter(t => t.status === 'wip').forEach(t => {
         weekendWIP.push({text: t.text, status: 'wip', carried: true});
       });
