@@ -934,7 +934,7 @@ function archiveCurrent() {
   const data=collectData();
   if(!data.dateRange){showToast('報告期間を設定してください');return;}
   const hasTasks=DAYS.some(d=>tasks[d.key].length>0);
-  if(!hasTasks){showToast('データがありません');return;}
+  if(!hasTasks&&!DAYS.some(function(d){var sr=document.getElementById(d.key+'_salesResult'),rv=document.getElementById(d.key+'_revenue'),nt=document.getElementById(d.key+'_notes'),co=document.getElementById(d.key+'_consideration');return (sr&&sr.value.trim())||(rv&&rv.value.trim()&&rv.value!=='0')||(nt&&nt.value.trim())||(co&&co.value.trim());})){showToast('データがありません');return;}
   data._archivedAt=new Date().toISOString();
   data._version=DATA_VERSION;
   const hist=getHistory();
