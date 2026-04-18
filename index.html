@@ -570,7 +570,7 @@ function buildTabs() {
         <div class="info"><strong>&#8592;</strong> <span id="carry-info-${day.key}"></span></div>
         <button onclick="doCarryOver('${day.key}',${i})">繰り越す</button>
       </div>`:''}
-      <div class="task-section">
+      ${(day.key==='fri'||day.key==='sat')?`<div style="background:#fff4e6;border:1px solid #ffcd83;border-radius:6px;padding:8px 12px;margin:6px 0;display:flex;align-items:center;gap:10px;"><button type="button" onclick="carryWipToNextWeek('${day.key}')" style="background:#dd6b20;color:#fff;border:none;border-radius:4px;padding:6px 12px;cursor:pointer;font-size:13px;">翌週月曜に繰越</button><span style="font-size:12px;color:#666;">（${day.key==='fri'?'金':'土'}曜の対応中を翌週月曜に上書き保存）</span></div>`:''}<div class="task-section">
         <div class="task-section-title">
           受けた依頼・対応案件 <span class="cn">收到的委托・处理案件</span>
           <span class="count" id="count-${day.key}">0</span>
@@ -759,7 +759,7 @@ function switchWeek() {
   const weekendWIP = [];
   if(_lastWeekStart) {
     const satWIP = tasks['sat'] || [];
-    satWIP.filter(t => t.status === 'wip').forEach(t => {
+    satWIP.filter(function(){return false;}).forEach(t => {
       weekendWIP.push({text: t.text, status: 'wip', carried: true});
     });
   }
@@ -810,7 +810,7 @@ function switchWeek() {
   }
   checkCarryOver();
 
-  _lastWeekStart = newWeek;
+  applyPendingCarry();_lastWeekStart = newWeek;
   autoSave();
 }
 function getDateRangeCN(){
@@ -922,7 +922,7 @@ function restoreData(data) {
 // ============================================================
 // History management — archive finished weeks
 // ============================================================
-function getHistory(){
+function fmtRangeFromMon(mon){var sat=new Date(mon);sat.setDate(mon.getDate()+5);var w=['日','月','火','水','木','金','土'];return mon.getFullYear()+'年'+(mon.getMonth()+1)+'月'+mon.getDate()+'日（'+w[mon.getDay()]+'）～ '+sat.getFullYear()+'年'+(sat.getMonth()+1)+'月'+sat.getDate()+'日（'+w[sat.getDay()]+'）';} function carryWipToNextWeek(dk){if(dk!=='fri'&&dk!=='sat')return; var wipTasks=(tasks[dk]||[]).filter(function(t){return t.status==='wip';}); if(wipTasks.length===0){showToast('対応中のタスクがありません');return;} var curStart=document.getElementById('weekStart').value; if(!curStart){showToast('週を先に選択してください');return;} var nm=new Date(curStart); nm.setDate(nm.getDate()+7); var targetMonday=fmtISO(nm); var payload={targetMonday:targetMonday,tasks:wipTasks.map(function(t){return{text:t.text,status:'wip',carried:true};}),createdAt:new Date().toISOString()}; try{localStorage.setItem('meirin_report_pending_carry',JSON.stringify(payload));}catch(e){showToast('保存に失敗しました');return;} showToast('翌週月曜に'+wipTasks.length+'件を繰越予約しました');} function applyPendingCarry(){var p; try{p=JSON.parse(localStorage.getItem('meirin_report_pending_carry')||'null');}catch(e){p=null;} if(!p||!p.targetMonday||!Array.isArray(p.tasks))return; var cs=document.getElementById('weekStart').value; if(!cs)return; var d=new Date(cs); var dow=d.getDay(); var mon=new Date(d); if(dow!==1){mon.setDate(mon.getDate()+(dow===0?-6:1-dow));} var curMondayISO=fmtISO(mon); if(p.targetMonday!==curMondayISO)return; tasks['mon']=tasks['mon']||[]; var existing=tasks['mon'].map(function(t){return t.text;}); var added=0; p.tasks.forEach(function(t){if(!existing.includes(t.text)){tasks['mon'].push({text:t.text,status:t.status||'wip',carried:true});added++;}}); if(added>0){renderTasks('mon');showToast('翌週繰越: '+added+'件を月曜に追加しました');} try{localStorage.removeItem('meirin_report_pending_carry');}catch(e){}} function getHistory(){
   try{return JSON.parse(localStorage.getItem(HISTORY_KEY)||'[]');}
   catch(e){return [];}
 }
